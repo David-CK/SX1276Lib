@@ -14,5 +14,10 @@ Maintainers: Miguel Luis, Gregory Cristian and Nicolas Huguenin
 */
 #ifndef __TYPEDEFS_H__
 #define __TYPEDEFS_H__
+class SX1276;
+/*!
+ * Hardware IO IRQ callback function definition
+ */
+typedef void ( SX1276::*DioIrqHandler )( void );
 #endif //__TYPEDEFS_H__
 

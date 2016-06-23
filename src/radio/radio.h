@@ -90,6 +90,27 @@ public:
            void ( *rxTimeout ) ( ), void ( *rxError ) ( ), void ( *fhssChangeChannel ) ( uint8_t channelIndex ), void ( *cadDone ) ( bool channelActivityDetected ) );
     virtual ~Radio( ) {};
     /*!
+     * @brief Sends the buffer of size. Prepares the packet to be sent and sets
+     *        the radio in transmission
+     *
+     * @param [IN]: buffer     Buffer pointer
+     * @param [IN]: size       Buffer size
+     */
+    virtual void Send( uint8_t *buffer, uint8_t size ) = 0;
+    /*!
+     * @brief Sets the radio in reception mode for the given time
+     * @param [IN] timeout Reception timeout [us]
+     *                     [0: continuous, others timeout]
+     */
+    virtual void Rx( uint32_t timeout ) = 0;
+    
+    /*!
+     * @brief Sets the radio in transmission mode for the given time
+     * @param [IN] timeout Transmission timeout [us]
+     *                     [0: continuous, others timeout]
+     */
+    virtual void Tx( uint32_t timeout ) = 0;
+    /*!
      * @brief Reads the radio register at the specified address
      *
      * @param [IN]: addr Register address
@@ -99,3 +120,4 @@ public:
 };
 
 #endif // __RADIO_H__
+
