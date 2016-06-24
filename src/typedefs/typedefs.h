@@ -19,5 +19,24 @@ class SX1276;
  * Hardware IO IRQ callback function definition
  */
 typedef void ( SX1276::*DioIrqHandler )( void );
+/*!
+ * FSK bandwidth definition
+ */
+typedef struct
+{
+    uint32_t bandwidth;
+    uint8_t  RegValue;
+}FskBandwidth_t;
+
+/*!
+ * Radio registers definition
+ */
+typedef struct
+{
+    ModemType   Modem;
+    uint8_t     Addr;
+    uint8_t     Value;
+}RadioRegisters_t;
+
 #endif //__TYPEDEFS_H__
 
