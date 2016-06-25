@@ -76,6 +76,15 @@ public:
      * @brief Detect the board connected by reading the value of the antenna switch pin
      */
     virtual uint8_t DetectBoardType( void );    
+    
+    /*!
+     * @brief Checks if the given RF frequency is supported by the hardware
+     *
+     * @param [IN] frequency RF frequency to be checked
+     * @retval isSupported [true: supported, false: unsupported]
+     */
+    virtual bool CheckRfFrequency( uint32_t frequency );
+    
         /*!
      * @brief Writes the radio register at the specified address
      *

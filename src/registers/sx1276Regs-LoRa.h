@@ -28,6 +28,7 @@ Maintainer: Miguel Luis and Gregory Cristian
 #define REG_LR_FIFOTXBASEADDR                       0x0E 
 #define REG_LR_FIFORXBASEADDR                       0x0F 
 #define REG_LR_IRQFLAGSMASK                         0x11 
+#define REG_LR_RSSIVALUE                            0x1B 
 #define REG_LR_MODEMCONFIG1                         0x1D 
 #define REG_LR_MODEMCONFIG2                         0x1E 
 #define REG_LR_SYMBTIMEOUTLSB                       0x1F 
@@ -37,6 +38,7 @@ Maintainer: Miguel Luis and Gregory Cristian
 #define REG_LR_PAYLOADMAXLENGTH                     0x23 
 #define REG_LR_HOPPERIOD                            0x24 
 #define REG_LR_MODEMCONFIG3                         0x26
+#define REG_LR_RSSIWIDEBAND                         0x2C
 #define REG_LR_DETECTOPTIMIZE                       0x31
 #define REG_LR_INVERTIQ                             0x33
 #define REG_LR_DETECTIONTHRESHOLD                   0x37
@@ -63,6 +65,7 @@ Maintainer: Miguel Luis and Gregory Cristian
 #define RFLR_OPMODE_RECEIVER                        0x05 
 // LoRa specific modes
 #define RFLR_OPMODE_RECEIVER_SINGLE                 0x06 
+#define RFLR_OPMODE_CAD                             0x07 
 /*!
  * RegFrf ( MHz )
  */

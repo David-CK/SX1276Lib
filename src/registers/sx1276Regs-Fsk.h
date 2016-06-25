@@ -26,6 +26,7 @@ Maintainer: Miguel Luis and Gregory Cristian
 #define REG_LNA                                     0x0C
 #define REG_RXCONFIG                                0x0D
 #define REG_RSSICONFIG                              0x0E
+#define REG_RSSIVALUE                               0x11
 #define REG_RXBW                                    0x12 
 #define REG_AFCBW                                   0x13
 #define REG_PREAMBLEDETECT                          0x1F
@@ -51,16 +52,19 @@ Maintainer: Miguel Luis and Gregory Cristian
 #define RF_OPMODE_SLEEP                             0x00
 #define RF_OPMODE_STANDBY                           0x01  // Default
 #define RF_OPMODE_TRANSMITTER                       0x03
+#define RF_OPMODE_RECEIVER                          0x05
 #define RF_PACONFIG_PASELECT_MASK                   0x7F
 #define RF_PACONFIG_PASELECT_PABOOST                0x80
 #define RF_PACONFIG_PASELECT_RFO                    0x00 // Default
 #define RF_PACONFIG_MAX_POWER_MASK                  0x8F
 #define RF_PACONFIG_OUTPUTPOWER_MASK                0xF0
 #define RF_RXCONFIG_RESTARTRXWITHOUTPLLLOCK         0x40 // Write only
+#define RF_SYNCCONFIG_SYNCSIZE_MASK                 0xF8
 #define RF_PACKETCONFIG1_PACKETFORMAT_MASK          0x7F
 #define RF_PACKETCONFIG1_PACKETFORMAT_FIXED         0x00
 #define RF_PACKETCONFIG1_PACKETFORMAT_VARIABLE      0x80  // Default
 #define RF_PACKETCONFIG1_CRC_MASK                   0xEF
+#define RF_PACKETCONFIG1_ADDRSFILTERING_MASK         0xF9
 #define RF_IMAGECAL_IMAGECAL_MASK                   0xBF
 #define RF_IMAGECAL_IMAGECAL_START                  0x40
 #define RF_IMAGECAL_IMAGECAL_RUNNING                0x20

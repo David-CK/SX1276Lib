@@ -14,11 +14,22 @@ Maintainers: Miguel Luis, Gregory Cristian and Nicolas Huguenin
 */
 #ifndef __TYPEDEFS_H__
 #define __TYPEDEFS_H__
+
+#include "./enums/enums.h"
+
 class SX1276;
+class SX1276MB1xAS;
 /*!
  * Hardware IO IRQ callback function definition
  */
 typedef void ( SX1276::*DioIrqHandler )( void );
+
+/*!
+ * triggers definition
+ */
+typedef void ( SX1276::*Trigger )( void );
+typedef void ( SX1276MB1xAS::*TriggerMB1xAS )( void );
+
 /*!
  * FSK bandwidth definition
  */

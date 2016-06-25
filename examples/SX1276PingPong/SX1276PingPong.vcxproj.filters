@@ -21,5 +21,8 @@
     <ClInclude Include="__vm\.SX1276PingPong.vsarduino.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="SX1276PingPong.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

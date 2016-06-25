@@ -13,7 +13,7 @@
 #define __AVR_ATmega328p__
 #define __AVR_ATmega328P__
 #define F_CPU 16000000L
-#define ARDUINO 10609
+#define ARDUINO 10608
 #define ARDUINO_AVR_UNO
 #define ARDUINO_ARCH_AVR
 #define __cplusplus 201103L
@@ -73,4 +73,5 @@ void OnRxTimeout( void );
 void OnRxError( void );
 
 #include <SX1276PingPong.ino>
+#include <SX1276PingPong.h>
 #endif

@@ -15,7 +15,7 @@ Maintainers: Miguel Luis, Gregory Cristian and Nicolas Huguenin
 #ifndef __RADIO_H__
 #define __RADIO_H__
 
-#include "enums/enums.h"
+#include "./enums/enums.h"
 
 /*!
  *    Interface for the radios, contains the main functions that a radio needs, and 5 callback functions
@@ -95,6 +95,13 @@ public:
     //-------------------------------------------------------------------------
 
     /*!
+     * Return current radio status
+     *
+     * @param status Radio status.[RF_IDLE, RF_RX_RUNNING, RF_TX_RUNNING]
+     */
+    virtual RadioState GetStatus( void ) = 0; 
+
+    /*!
      * \brief Configures the radio with the given modem
      *
      * \param [IN] modem Modem to be used [0: FSK, 1: LoRa] 
@@ -107,6 +114,30 @@ public:
      * @param [IN] freq         Channel RF frequency
      */
     virtual void SetChannel( uint32_t freq ) = 0;
+    
+    /*!
+     * @brief Sets the channels configuration
+     *
+     * @param [IN] modem      Radio modem to be used [0: FSK, 1: LoRa]
+     * @param [IN] freq       Channel RF frequency
+     * @param [IN] rssiThresh RSSI threshold
+     *
+     * @retval isFree         [true: Channel is free, false: Channel is not free]
+     */
+    virtual bool IsChannelFree( ModemType modem, uint32_t freq, int8_t rssiThresh ) = 0;
+    
+    /*!
+     * @brief Generates a 32 bits random value based on the RSSI readings
+     *
+     * \remark This function sets the radio in LoRa modem mode and disables
+     *         all interrupts.
+     *         After calling this function either Radio.SetRxConfig or
+     *         Radio.SetTxConfig functions must be called.
+     *
+     * @retval randomValue    32 bits random value
+     */
+    virtual uint32_t Random( void )= 0;
+    
     /*!
      * @brief Sets the reception parameters
      *
@@ -186,6 +217,26 @@ public:
                               uint8_t hopPeriod, bool iqInverted, uint32_t timeout ) = 0;
     
     /*!
+     * @brief Checks if the given RF frequency is supported by the hardware
+     *
+     * @param [IN] frequency RF frequency to be checked
+     * @retval isSupported [true: supported, false: unsupported]
+     */
+    virtual bool CheckRfFrequency( uint32_t frequency ) = 0;
+    
+    /*!
+     * @brief Computes the packet time on air for the given payload
+     *
+     * \Remark Can only be called once SetRxConfig or SetTxConfig have been called
+     *
+     * @param [IN] modem      Radio modem to be used [0: FSK, 1: LoRa]
+     * @param [IN] pktLen     Packet payload length
+     *
+     * @retval airTime        Computed airTime for the given packet payload length
+     */
+    virtual double TimeOnAir ( ModemType modem, uint8_t pktLen ) = 0;
+    
+    /*!
      * @brief Sends the buffer of size. Prepares the packet to be sent and sets
      *        the radio in transmission
      *
@@ -194,11 +245,20 @@ public:
      */
     virtual void Send( uint8_t *buffer, uint8_t size ) = 0;
     
+    /*!
+     * @brief Sets the radio in sleep mode
+     */
+    virtual void Sleep( void ) = 0;
     
     /*!
      * @brief Sets the radio in standby mode
      */
     virtual void Standby( void ) = 0;
+    
+    /*!
+     * @brief Sets the radio in CAD mode
+     */
+    virtual void StartCad( void ) = 0;
     
     /*!
      * @brief Sets the radio in reception mode for the given time
@@ -214,6 +274,12 @@ public:
      */
     virtual void Tx( uint32_t timeout ) = 0;
     
+    /*!
+     * @brief Reads the current RSSI value
+     *
+     * @retval rssiValue Current RSSI value in [dBm]
+     */
+    virtual int16_t GetRssi ( ModemType modem ) = 0;
     
     /*!
      * @brief Writes the radio register at the specified address

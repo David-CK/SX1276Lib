@@ -151,6 +151,14 @@ static uint8_t spi_read(uint8_t addr)
 	lora_pin_nss(1);
 	return val;
 }
+
+bool SX1276MB1xAS::CheckRfFrequency( uint32_t frequency )
+{
+    //TODO: Implement check, currently all frequencies are supported
+    return true;
+}
+
+
 void SX1276MB1xAS::Reset( void )
 {
 	pinMode( reset, OUTPUT );

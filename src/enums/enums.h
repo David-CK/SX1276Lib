@@ -42,10 +42,12 @@ enum RadioState
     
     RX,
     RX_TIMEOUT,
+    RX_ERROR,
     
     TX,
     TX_TIMEOUT,
     
+    CAD,
 };
 
 /*!

@@ -56,6 +56,7 @@ SX1276::SX1276( void ( *txDone )( ), void ( *txTimeout ) ( ), void ( *rxDone ) (
     this->dioIrq = new DioIrqHandler[6];
 
     this->dioIrq[0] = &SX1276::OnDio0Irq;
+    
     this->settings.State = IDLE;
 }
 
@@ -102,24 +103,78 @@ void SX1276::RxChainCalibration( void )
     this->Write( REG_PACONFIG, regPaConfigInitVal );
     SetChannel( initialFreq );
 }
+
+RadioState SX1276::GetStatus( void )
+{
+    return this->settings.State;
+}
+
 void SX1276::SetChannel( uint32_t freq )
 {
-	debug(reset);
-
     this->settings.Channel = freq;
     freq = ( uint32_t )( ( double )freq / ( double )FREQ_STEP );
     Write( REG_FRFMSB, ( uint8_t )( ( freq >> 16 ) & 0xFF ) );
     Write( REG_FRFMID, ( uint8_t )( ( freq >> 8 ) & 0xFF ) );
     Write( REG_FRFLSB, ( uint8_t )( freq & 0xFF ) );
-#if 0
-	debug((5));
-	debug((Read(REG_FRFMSB)));
-	delay(1000);
-	Write( REG_FRFMSB, ( uint8_t ) ( 10 ) );
-    //Write( REG_FRFMSB, ( uint8_t )( ( freq >> 16 ) & 0xFF ) );
-	delay(1000);
-	debug((Read(REG_FRFMSB)));
-#endif
+}
+
+bool SX1276::IsChannelFree( ModemType modem, uint32_t freq, int8_t rssiThresh )
+{
+    int16_t rssi = 0;
+    
+    SetModem( modem );
+
+    SetChannel( freq );
+    
+    SetOpMode( RF_OPMODE_RECEIVER );
+
+    delay( 1 );
+    
+    rssi = GetRssi( modem );
+    
+    Sleep( );
+    
+    if( rssi > ( int16_t )rssiThresh )
+    {
+        return false;
+    }
+    return true;
+}
+
+uint32_t SX1276::Random( void )
+{
+    uint8_t i;
+    uint32_t rnd = 0;
+
+    /*
+     * Radio setup for random number generation 
+     */
+    // Set LoRa modem ON
+    SetModem( MODEM_LORA );
+
+    // Disable LoRa modem interrupts
+    Write( REG_LR_IRQFLAGSMASK, RFLR_IRQFLAGS_RXTIMEOUT |
+                  RFLR_IRQFLAGS_RXDONE |
+                  RFLR_IRQFLAGS_PAYLOADCRCERROR |
+                  RFLR_IRQFLAGS_VALIDHEADER |
+                  RFLR_IRQFLAGS_TXDONE |
+                  RFLR_IRQFLAGS_CADDONE |
+                  RFLR_IRQFLAGS_FHSSCHANGEDCHANNEL |
+                  RFLR_IRQFLAGS_CADDETECTED );
+
+    // Set radio in continuous reception
+    SetOpMode( RF_OPMODE_RECEIVER );
+
+    for( i = 0; i < 32; i++ )
+    {
+        wait_ms( 1 );
+        // Unfiltered RSSI value reading. Only takes the LSB value
+        rnd |= ( ( uint32_t )Read( REG_LR_RSSIWIDEBAND ) & 0x01 ) << i;
+    }
+
+    Sleep( );
+
+    return rnd;
 }
 
 /*!
@@ -475,6 +530,86 @@ void SX1276::SetTxConfig( ModemType modem, int8_t power, uint32_t fdev,
         break;
     }
 }
+
+double SX1276::TimeOnAir( ModemType modem, uint8_t pktLen )
+{
+    double airTime = 0.0;
+
+    switch( modem )
+    {
+    case MODEM_FSK:
+        {
+            airTime = ceil( ( 8 * ( this->settings.Fsk.PreambleLen +
+                                     ( ( Read( REG_SYNCCONFIG ) & ~RF_SYNCCONFIG_SYNCSIZE_MASK ) + 1 ) +
+                                     ( ( this->settings.Fsk.FixLen == 0x01 ) ? 0.0 : 1.0 ) +
+                                     ( ( ( Read( REG_PACKETCONFIG1 ) & ~RF_PACKETCONFIG1_ADDRSFILTERING_MASK ) != 0x00 ) ? 1.0 : 0 ) +
+                                     pktLen +
+                                     ( ( this->settings.Fsk.CrcOn == 0x01 ) ? 2.0 : 0 ) ) /
+                                     this->settings.Fsk.Datarate ) * 1e6 );
+        }
+        break;
+    case MODEM_LORA:
+        {
+            double bw = 0.0;
+            // REMARK: When using LoRa modem only bandwidths 125, 250 and 500 kHz are supported
+            switch( this->settings.LoRa.Bandwidth )
+            {
+            //case 0: // 7.8 kHz
+            //    bw = 78e2;
+            //    break;
+            //case 1: // 10.4 kHz
+            //    bw = 104e2;
+            //    break;
+            //case 2: // 15.6 kHz
+            //    bw = 156e2;
+            //    break;
+            //case 3: // 20.8 kHz
+            //    bw = 208e2;
+            //    break;
+            //case 4: // 31.2 kHz
+            //    bw = 312e2;
+            //    break;
+            //case 5: // 41.4 kHz
+            //    bw = 414e2;
+            //    break;
+            //case 6: // 62.5 kHz
+            //    bw = 625e2;
+            //    break;
+            case 7: // 125 kHz
+                bw = 125e3;
+                break;
+            case 8: // 250 kHz
+                bw = 250e3;
+                break;
+            case 9: // 500 kHz
+                bw = 500e3;
+                break;
+            }
+
+            // Symbol rate : time for one symbol (secs)
+            double rs = bw / ( 1 << this->settings.LoRa.Datarate );
+            double ts = 1 / rs;
+            // time of preamble
+            double tPreamble = ( this->settings.LoRa.PreambleLen + 4.25 ) * ts;
+            // Symbol length of payload and time
+            double tmp = ceil( ( 8 * pktLen - 4 * this->settings.LoRa.Datarate +
+                                 28 + 16 * this->settings.LoRa.CrcOn -
+                                 ( this->settings.LoRa.FixLen ? 20 : 0 ) ) /
+                                 ( double )( 4 * this->settings.LoRa.Datarate -
+                                 ( ( this->settings.LoRa.LowDatarateOptimize > 0 ) ? 8 : 0 ) ) ) *
+                                 ( this->settings.LoRa.Coderate + 4 );
+            double nPayload = 8 + ( ( tmp > 0 ) ? tmp : 0 );
+            double tPayload = nPayload * ts;
+            // Time on air 
+            double tOnAir = tPreamble + tPayload;
+            // return us secs
+            airTime = floor( tOnAir * 1e6 + 0.999 );
+        }
+        break;
+    }
+    return airTime;
+}
+
 void SX1276::Send( uint8_t *buffer, uint8_t size )
 {
     uint32_t txTimeout = 0;
@@ -487,6 +622,7 @@ void SX1276::Send( uint8_t *buffer, uint8_t size )
         {
             this->settings.FskPacketHandler.NbBytes = 0;
             this->settings.FskPacketHandler.Size = size;
+
             if( this->settings.Fsk.FixLen == false )
             {
                 WriteFifo( ( uint8_t* )&size, 1 );
@@ -495,6 +631,7 @@ void SX1276::Send( uint8_t *buffer, uint8_t size )
             {
                 Write( REG_PAYLOADLENGTH, size );
             }            
+            
             if( ( size > 0 ) && ( size <= 64 ) )
             {
                 this->settings.FskPacketHandler.ChunkSize = size;
@@ -544,6 +681,12 @@ void SX1276::Send( uint8_t *buffer, uint8_t size )
 
     Tx( txTimeout );
 }
+
+void SX1276::Sleep( void )
+{
+    SetOpMode( RF_OPMODE_SLEEP );
+}
+
 void SX1276::Standby( void )
 {
     SetOpMode( RF_OPMODE_STANDBY );
@@ -714,6 +857,66 @@ void SX1276::Tx( uint32_t timeout )
     this->settings.State = TX;
     SetOpMode( RF_OPMODE_TRANSMITTER );
 }
+
+void SX1276::StartCad( void )
+{
+    switch( this->settings.Modem )
+    {
+    case MODEM_FSK:
+        {
+           
+        }
+        break;
+    case MODEM_LORA:
+        {
+            Write( REG_LR_IRQFLAGSMASK, RFLR_IRQFLAGS_RXTIMEOUT |
+                                        RFLR_IRQFLAGS_RXDONE |
+                                        RFLR_IRQFLAGS_PAYLOADCRCERROR |
+                                        RFLR_IRQFLAGS_VALIDHEADER |
+                                        RFLR_IRQFLAGS_TXDONE |
+                                        //RFLR_IRQFLAGS_CADDONE |
+                                        RFLR_IRQFLAGS_FHSSCHANGEDCHANNEL // |
+                                        //RFLR_IRQFLAGS_CADDETECTED 
+                                        );
+                                          
+            // DIO3=CADDone
+            Write( REG_DIOMAPPING1, ( Read( REG_DIOMAPPING1 ) & RFLR_DIOMAPPING1_DIO0_MASK ) | RFLR_DIOMAPPING1_DIO0_00 );
+            
+            this->settings.State = CAD;
+            SetOpMode( RFLR_OPMODE_CAD );
+        }
+        break;
+    default:
+        break;
+    }
+}
+
+int16_t SX1276::GetRssi( ModemType modem )
+{
+    int16_t rssi = 0;
+
+    switch( modem )
+    {
+    case MODEM_FSK:
+        rssi = -( Read( REG_RSSIVALUE ) >> 1 );
+        break;
+    case MODEM_LORA:
+        if( this->settings.Channel > RF_MID_BAND_THRESH )
+        {
+            rssi = RSSI_OFFSET_HF + Read( REG_LR_RSSIVALUE );
+        }
+        else
+        {
+            rssi = RSSI_OFFSET_LF + Read( REG_LR_RSSIVALUE );
+        }
+        break;
+    default:
+        rssi = -1;
+        break;
+    }
+    return rssi;
+}
+
 void SX1276::SetOpMode( uint8_t opMode )
 {
     if( opMode != previousOpMode )
@@ -833,4 +1036,19 @@ void SX1276::OnDio0Irq( void )
         default:
             break;
     }
+}
+void SX1276::OnDio1Irq( void )
+{
+}
+void SX1276::OnDio2Irq( void )
+{
+}
+void SX1276::OnDio3Irq( void )
+{
+}
+void SX1276::OnDio4Irq( void )
+{
+}
+void SX1276::OnDio5Irq( void )
+{
 }
