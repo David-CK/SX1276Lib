@@ -15,14 +15,28 @@ Maintainers: Miguel Luis, Gregory Cristian and Nicolas Huguenin
 #ifndef __SX1276_H__
 #define __SX1276_H__
 
-#include "radio/radio.h"
-#include "registers/sx1276Regs-Fsk.h"
-#include "registers/sx1276Regs-LoRa.h"
-#include "typedefs/typedefs.h"  // //
+#include "./radio/radio.h"
+#include "./registers/sx1276Regs-Fsk.h"
+#include "./registers/sx1276Regs-LoRa.h"
+#include "./typedefs/typedefs.h"
+
+/*!
+ * Radio wakeup time from SLEEP mode
+ */
+#define RADIO_WAKEUP_TIME                           1000 // [us]
+
+/*!
+ * SX1276 definitions
+ */
 #define XTAL_FREQ                                   32000000
 #define FREQ_STEP                                   61.03515625
 
 #define RX_BUFFER_SIZE                              256
+
+#define DEFAULT_TIMEOUT                             200 //usec
+#define RSSI_OFFSET                                 -139.0
+
+
 /*!
  * Constant values need to compute the RSSI value
  */
@@ -38,9 +52,26 @@ class SX1276 : public Radio
 {
 protected:
     /*!
+    * SPI Interface
+    */
+    //SPI spi; // mosi, miso, sclk
+    DigitalOut nss;
+
+    /*!
      * SX1276 Reset pin
      */
     DigitalInOut reset;
+
+    /*!
+     * SX1276 DIO pins
+     */
+    InterruptIn dio0;
+    InterruptIn dio1;
+    InterruptIn dio2; 
+    InterruptIn dio3;
+    InterruptIn dio4;
+    DigitalIn dio5;
+    
     bool isRadioActive;
     
     uint8_t boardConnected; //1 = SX1276MB1LAS; 0 = SX1276MB1MAS
@@ -75,6 +106,8 @@ public:
             void ( *rxTimeout ) ( ), void ( *rxError ) ( ), void ( *fhssChangeChannel ) ( uint8_t channelIndex ), void ( *cadDone ) ( bool channelActivityDetected ),
             PinName mosi, PinName miso, PinName sclk, PinName nss, PinName reset,
             PinName dio0, PinName dio1, PinName dio2, PinName dio3, PinName dio4, PinName dio5 ); 
+    SX1276( void ( *txDone )( ), void ( *txTimeout ) ( ), void ( *rxDone ) ( uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr ), 
+            void ( *rxTimeout ) ( ), void ( *rxError ) ( ), void ( *fhssChangeChannel ) ( uint8_t channelIndex ), void ( *cadDone ) ( bool channelActivityDetected ) );
     virtual ~SX1276( );
     
     //-------------------------------------------------------------------------
@@ -332,6 +365,20 @@ protected:
      * @brief Initializes the radio SPI
      */
     virtual void SpiInit( void ) = 0;
+    
+    /*!
+     * @brief Initializes DIO IRQ handlers
+     *
+     * @param [IN] irqHandlers Array containing the IRQ callback functions
+     */
+    virtual void IoIrqInit( DioIrqHandler *irqHandlers ) = 0;
+
+    /*!
+     * @brief De-initializes the radio I/Os pins interface. 
+     *
+     * \remark Useful when going in MCU lowpower modes
+     */
+    virtual void IoDeInit( void ) = 0;
 
     /*!
      * @brief Gets the board PA selection configuration
@@ -347,6 +394,18 @@ protected:
      * @param [IN] status enable or disable
      */
     virtual void SetAntSwLowPower( bool status ) = 0;
+
+    /*!
+     * @brief Initializes the RF Switch I/Os pins interface
+     */
+    virtual void AntSwInit( void ) = 0;
+
+    /*!
+     * @brief De-initializes the RF Switch I/Os pins interface 
+     *
+     * \remark Needed to decrease the power consumption in MCU lowpower modes
+     */
+    virtual void AntSwDeInit( void ) = 0;
 
     /*!
      * @brief Controls the antena switch if necessary.

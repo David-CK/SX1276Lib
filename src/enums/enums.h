@@ -24,8 +24,12 @@ Maintainers: Miguel Luis, Gregory Cristian and Nicolas Huguenin
 #include <Arduino.h>
 #include "debug-git/debug.h"
 typedef uint8_t			PinName;
+typedef uint8_t			DigitalIn;
+typedef uint8_t			DigitalOut;
 typedef uint8_t			DigitalInOut;
+typedef uint8_t			InterruptIn;
 
+#define wait(x)			delay(x * 1000)
 #define wait_ms(x)		delay(x)
 
 /*!
@@ -48,6 +52,7 @@ enum RadioState
     TX_TIMEOUT,
     
     CAD,
+    CAD_DONE
 };
 
 /*!

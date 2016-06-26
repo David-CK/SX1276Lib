@@ -12,7 +12,7 @@ License: Revised BSD License, see LICENSE.TXT file include in the project
 
 Maintainers: Miguel Luis, Gregory Cristian and Nicolas Huguenin
 */
-#include "sx1276/sx1276.h"
+#include "sx1276.h"
 
 const FskBandwidth_t SX1276::FskBandwidths[] =
 {       
@@ -46,9 +46,13 @@ SX1276::SX1276( void ( *txDone )( ), void ( *txTimeout ) ( ), void ( *rxDone ) (
                 PinName mosi, PinName miso, PinName sclk, PinName nss, PinName reset,
                 PinName dio0, PinName dio1, PinName dio2, PinName dio3, PinName dio4, PinName dio5 )
             :   Radio( txDone, txTimeout, rxDone, rxTimeout, rxError, fhssChangeChannel, cadDone ),
+                //spi( mosi, miso, sclk ),
+                nss( nss ),
                 reset( reset ),
+                dio0( dio0 ), dio1( dio1 ), dio2( dio2 ), dio3( dio3 ), dio4( dio4 ), dio5( dio5 ),
                 isRadioActive( false )
 {
+    wait_ms( 10 );
     this->rxTx = 0;
     this->rxBuffer = new uint8_t[RX_BUFFER_SIZE];
     previousOpMode = RF_OPMODE_STANDBY;
@@ -56,6 +60,11 @@ SX1276::SX1276( void ( *txDone )( ), void ( *txTimeout ) ( ), void ( *rxDone ) (
     this->dioIrq = new DioIrqHandler[6];
 
     this->dioIrq[0] = &SX1276::OnDio0Irq;
+    this->dioIrq[1] = &SX1276::OnDio1Irq;
+    this->dioIrq[2] = &SX1276::OnDio2Irq;
+    this->dioIrq[3] = &SX1276::OnDio3Irq;
+    this->dioIrq[4] = &SX1276::OnDio4Irq;
+    this->dioIrq[5] = NULL;
     
     this->settings.State = IDLE;
 }
@@ -84,7 +93,6 @@ void SX1276::RxChainCalibration( void )
     Write ( REG_IMAGECAL, ( Read( REG_IMAGECAL ) & RF_IMAGECAL_IMAGECAL_MASK ) | RF_IMAGECAL_IMAGECAL_START );
     while( ( Read( REG_IMAGECAL ) & RF_IMAGECAL_IMAGECAL_RUNNING ) == RF_IMAGECAL_IMAGECAL_RUNNING )
     {
-	/*error  ck*/
 	break;
     }
 
@@ -95,7 +103,6 @@ void SX1276::RxChainCalibration( void )
     Write ( REG_IMAGECAL, ( Read( REG_IMAGECAL ) & RF_IMAGECAL_IMAGECAL_MASK ) | RF_IMAGECAL_IMAGECAL_START );
     while( ( Read( REG_IMAGECAL ) & RF_IMAGECAL_IMAGECAL_RUNNING ) == RF_IMAGECAL_IMAGECAL_RUNNING )
     {
-		/*error ck*/
 		break;
     }
 
@@ -128,7 +135,7 @@ bool SX1276::IsChannelFree( ModemType modem, uint32_t freq, int8_t rssiThresh )
     
     SetOpMode( RF_OPMODE_RECEIVER );
 
-    delay( 1 );
+    wait_ms( 1 );
     
     rssi = GetRssi( modem );
     
@@ -671,6 +678,7 @@ void SX1276::Send( uint8_t *buffer, uint8_t size )
             if( ( Read( REG_OPMODE ) & ~RF_OPMODE_MASK ) == RF_OPMODE_SLEEP )
             {
                 Standby( );
+                wait_ms( 1 );
             }
             // Write payload buffer
             WriteFifo( buffer, size );
@@ -783,6 +791,11 @@ void SX1276::Rx( uint32_t timeout )
 
     if( this->settings.Modem == MODEM_FSK )
     {
+        SetOpMode( RF_OPMODE_RECEIVER );
+        
+        if( rxContinuous == false )
+        {
+        }
     }
     else
     {
@@ -1016,15 +1029,162 @@ void SX1276::OnTimeoutIrq( void )
 
 void SX1276::OnDio0Irq( void )
 {
+    volatile uint8_t irqFlags = 0;
+  
     switch( this->settings.State )
     {                
         case RX:
             switch( this->settings.Modem )
             {
             case MODEM_FSK:
+                if( this->settings.Fsk.CrcOn == true )
+                {
+                    irqFlags = Read( REG_IRQFLAGS2 );
+                    if( ( irqFlags & RF_IRQFLAGS2_CRCOK ) != RF_IRQFLAGS2_CRCOK )
+                    {
+                        // Clear Irqs
+                        Write( REG_IRQFLAGS1, RF_IRQFLAGS1_RSSI | 
+                                                    RF_IRQFLAGS1_PREAMBLEDETECT |
+                                                    RF_IRQFLAGS1_SYNCADDRESSMATCH );
+                        Write( REG_IRQFLAGS2, RF_IRQFLAGS2_FIFOOVERRUN );
+    
+                        if( this->settings.Fsk.RxContinuous == false )
+                        {
+                            this->settings.State = IDLE;
+                        }
+                        else
+                        {
+                            // Continuous mode restart Rx chain
+                            Write( REG_RXCONFIG, Read( REG_RXCONFIG ) | RF_RXCONFIG_RESTARTRXWITHOUTPLLLOCK );
+                        }
+    
+                        if( ( rxError != NULL ) )
+                        {
+                            rxError( ); 
+                        }
+                        this->settings.FskPacketHandler.PreambleDetected = false;
+                        this->settings.FskPacketHandler.SyncWordDetected = false;
+                        this->settings.FskPacketHandler.NbBytes = 0;
+                        this->settings.FskPacketHandler.Size = 0;
+                        break;
+                    }
+                }
+                
+                // Read received packet size
+                if( ( this->settings.FskPacketHandler.Size == 0 ) && ( this->settings.FskPacketHandler.NbBytes == 0 ) )
+                {
+                    if( this->settings.Fsk.FixLen == false )
+                    {
+                        ReadFifo( ( uint8_t* )&this->settings.FskPacketHandler.Size, 1 );
+                    }
+                    else
+                    {
+                        this->settings.FskPacketHandler.Size = Read( REG_PAYLOADLENGTH );
+                    }
+                    ReadFifo( rxBuffer + this->settings.FskPacketHandler.NbBytes, this->settings.FskPacketHandler.Size - this->settings.FskPacketHandler.NbBytes );
+                    this->settings.FskPacketHandler.NbBytes += ( this->settings.FskPacketHandler.Size - this->settings.FskPacketHandler.NbBytes );
+                }
+                else
+                {
+                    ReadFifo( rxBuffer + this->settings.FskPacketHandler.NbBytes, this->settings.FskPacketHandler.Size - this->settings.FskPacketHandler.NbBytes );
+                    this->settings.FskPacketHandler.NbBytes += ( this->settings.FskPacketHandler.Size - this->settings.FskPacketHandler.NbBytes );
+                }
+
+                if( this->settings.Fsk.RxContinuous == false )
+                {
+                    this->settings.State = IDLE;
+                }
+                else
+                {
+                    // Continuous mode restart Rx chain
+                    Write( REG_RXCONFIG, Read( REG_RXCONFIG ) | RF_RXCONFIG_RESTARTRXWITHOUTPLLLOCK );
+                }
+
+                if( (rxDone != NULL ) )
+                {
+                    rxDone( rxBuffer, this->settings.FskPacketHandler.Size, this->settings.FskPacketHandler.RssiValue, 0 ); 
+                } 
+                this->settings.FskPacketHandler.PreambleDetected = false;
+                this->settings.FskPacketHandler.SyncWordDetected = false;
+                this->settings.FskPacketHandler.NbBytes = 0;
+                this->settings.FskPacketHandler.Size = 0;
                 break;
             case MODEM_LORA:
                 {
+                    uint8_t snr = 0;
+
+                    // Clear Irq
+                    Write( REG_LR_IRQFLAGS, RFLR_IRQFLAGS_RXDONE );
+
+                    irqFlags = Read( REG_LR_IRQFLAGS );
+                    if( ( irqFlags & RFLR_IRQFLAGS_PAYLOADCRCERROR_MASK ) == RFLR_IRQFLAGS_PAYLOADCRCERROR )
+                    {
+                        // Clear Irq
+                        Write( REG_LR_IRQFLAGS, RFLR_IRQFLAGS_PAYLOADCRCERROR );
+
+                        if( this->settings.LoRa.RxContinuous == false )
+                        {
+                            this->settings.State = IDLE;
+                        }
+
+                        if( ( rxError != NULL ) )
+                        {
+                            rxError( ); 
+                        }
+                        break;
+                    }
+
+                    this->settings.LoRaPacketHandler.SnrValue = Read( REG_LR_PKTSNRVALUE );
+                    if( this->settings.LoRaPacketHandler.SnrValue & 0x80 ) // The SNR sign bit is 1
+                    {
+                        // Invert and divide by 4
+                        snr = ( ( ~this->settings.LoRaPacketHandler.SnrValue + 1 ) & 0xFF ) >> 2;
+                        snr = -snr;
+                    }
+                    else
+                    {
+                        // Divide by 4
+                        snr = ( this->settings.LoRaPacketHandler.SnrValue & 0xFF ) >> 2;
+                    }
+
+                    int16_t rssi = Read( REG_LR_PKTRSSIVALUE );
+                    if( this->settings.LoRaPacketHandler.SnrValue < 0 )
+                    {
+                        if( this->settings.Channel > RF_MID_BAND_THRESH )
+                        {
+                            this->settings.LoRaPacketHandler.RssiValue = RSSI_OFFSET_HF + rssi + ( rssi >> 4 ) +
+                                                                          snr;
+                        }
+                        else
+                        {
+                            this->settings.LoRaPacketHandler.RssiValue = RSSI_OFFSET_LF + rssi + ( rssi >> 4 ) +
+                                                                          snr;
+                        }
+                    }
+                    else
+                    {    
+                        if( this->settings.Channel > RF_MID_BAND_THRESH )
+                        {
+                            this->settings.LoRaPacketHandler.RssiValue = RSSI_OFFSET_HF + rssi + ( rssi >> 4 );
+                        }
+                        else
+                        {
+                            this->settings.LoRaPacketHandler.RssiValue = RSSI_OFFSET_LF + rssi + ( rssi >> 4 );
+                        }
+                    }
+
+                    this->settings.LoRaPacketHandler.Size = Read( REG_LR_RXNBBYTES );
+                    ReadFifo( rxBuffer, this->settings.LoRaPacketHandler.Size );
+                
+                    if( this->settings.LoRa.RxContinuous == false )
+                    {
+                        this->settings.State = IDLE;
+                    }
+
+                    if( ( rxDone != NULL ) )
+                    {
+                        rxDone( rxBuffer, this->settings.LoRaPacketHandler.Size, this->settings.LoRaPacketHandler.RssiValue, this->settings.LoRaPacketHandler.SnrValue );
+                    }
                 }
                 break;
             default:
@@ -1032,23 +1192,222 @@ void SX1276::OnDio0Irq( void )
             }
             break;
         case TX:
+            // TxDone interrupt
+            switch( this->settings.Modem )
+            {
+            case MODEM_LORA:
+                // Clear Irq
+                Write( REG_LR_IRQFLAGS, RFLR_IRQFLAGS_TXDONE );
+                // Intentional fall through
+            case MODEM_FSK:
+            default:
+                this->settings.State = IDLE;
+                if( ( txDone != NULL ) )
+                {
+                    txDone( ); 
+                } 
+                break;
+            }
             break;
         default:
             break;
     }
 }
+
 void SX1276::OnDio1Irq( void )
 {
+    switch( this->settings.State )
+    {                
+        case RX:
+            switch( this->settings.Modem )
+            {
+            case MODEM_FSK:
+                // FifoLevel interrupt
+                // Read received packet size
+                if( ( this->settings.FskPacketHandler.Size == 0 ) && ( this->settings.FskPacketHandler.NbBytes == 0 ) )
+                {
+                    if( this->settings.Fsk.FixLen == false )
+                    {
+                        ReadFifo( ( uint8_t* )&this->settings.FskPacketHandler.Size, 1 );
+                    }
+                    else
+                    {
+                        this->settings.FskPacketHandler.Size = Read( REG_PAYLOADLENGTH );
+                    }
+                }
+
+                if( ( this->settings.FskPacketHandler.Size - this->settings.FskPacketHandler.NbBytes ) > this->settings.FskPacketHandler.FifoThresh )
+                {
+                    ReadFifo( ( rxBuffer + this->settings.FskPacketHandler.NbBytes ), this->settings.FskPacketHandler.FifoThresh );
+                    this->settings.FskPacketHandler.NbBytes += this->settings.FskPacketHandler.FifoThresh;
+                }
+                else
+                {
+                    ReadFifo( ( rxBuffer + this->settings.FskPacketHandler.NbBytes ), this->settings.FskPacketHandler.Size - this->settings.FskPacketHandler.NbBytes );
+                    this->settings.FskPacketHandler.NbBytes += ( this->settings.FskPacketHandler.Size - this->settings.FskPacketHandler.NbBytes );
+                }
+                break;
+            case MODEM_LORA:
+                this->settings.State = IDLE;
+                if( ( rxTimeout != NULL ) )
+                {
+                    rxTimeout( );
+                }
+                break;
+            default:
+                break;
+            }
+            break;
+        case TX:
+            switch( this->settings.Modem )
+            {
+            case MODEM_FSK:
+                // FifoLevel interrupt
+                if( ( this->settings.FskPacketHandler.Size - this->settings.FskPacketHandler.NbBytes ) > this->settings.FskPacketHandler.ChunkSize )
+                {
+                    WriteFifo( ( rxBuffer + this->settings.FskPacketHandler.NbBytes ), this->settings.FskPacketHandler.ChunkSize );
+                    this->settings.FskPacketHandler.NbBytes += this->settings.FskPacketHandler.ChunkSize;
+                }
+                else 
+                {
+                    // Write the last chunk of data
+                    WriteFifo( rxBuffer + this->settings.FskPacketHandler.NbBytes, this->settings.FskPacketHandler.Size - this->settings.FskPacketHandler.NbBytes );
+                    this->settings.FskPacketHandler.NbBytes += this->settings.FskPacketHandler.Size - this->settings.FskPacketHandler.NbBytes;
+                }
+                break;
+            case MODEM_LORA:
+                break;
+            default:
+                break;
+            }
+            break;      
+        default:
+            break;
+    }
 }
+
 void SX1276::OnDio2Irq( void )
 {
+    switch( this->settings.State )
+    {                
+        case RX:
+            switch( this->settings.Modem )
+            {
+            case MODEM_FSK:
+                if( ( this->settings.FskPacketHandler.PreambleDetected == true ) && ( this->settings.FskPacketHandler.SyncWordDetected == false ) )
+                {
+                    
+                    this->settings.FskPacketHandler.SyncWordDetected = true;
+                
+                    this->settings.FskPacketHandler.RssiValue = -( Read( REG_RSSIVALUE ) >> 1 );
+
+                    this->settings.FskPacketHandler.AfcValue = ( int32_t )( double )( ( ( uint16_t )Read( REG_AFCMSB ) << 8 ) |
+                                                                           ( uint16_t )Read( REG_AFCLSB ) ) *
+                                                                           ( double )FREQ_STEP;
+                    this->settings.FskPacketHandler.RxGain = ( Read( REG_LNA ) >> 5 ) & 0x07;
+                }
+                break;
+            case MODEM_LORA:
+                if( this->settings.LoRa.FreqHopOn == true )
+                {
+                    // Clear Irq
+                    Write( REG_LR_IRQFLAGS, RFLR_IRQFLAGS_FHSSCHANGEDCHANNEL );
+                    
+                    if( ( fhssChangeChannel != NULL ) )
+                    {
+                        fhssChangeChannel( ( Read( REG_LR_HOPCHANNEL ) & RFLR_HOPCHANNEL_CHANNEL_MASK ) );
+                    }
+                }    
+                break;
+            default:
+                break;
+            }
+            break;
+        case TX:
+            switch( this->settings.Modem )
+            {
+            case MODEM_FSK:
+                break;
+            case MODEM_LORA:
+                if( this->settings.LoRa.FreqHopOn == true )
+                {
+                    // Clear Irq
+                    Write( REG_LR_IRQFLAGS, RFLR_IRQFLAGS_FHSSCHANGEDCHANNEL );
+                    
+                    if( ( fhssChangeChannel != NULL ) )
+                    {
+                        fhssChangeChannel( ( Read( REG_LR_HOPCHANNEL ) & RFLR_HOPCHANNEL_CHANNEL_MASK ) );
+                    }
+                }    
+                break;
+            default:
+                break;
+            }
+            break;      
+        default:
+            break;
+    }
 }
+
 void SX1276::OnDio3Irq( void )
 {
+    switch( this->settings.Modem )
+    {
+    case MODEM_FSK:
+        break;
+    case MODEM_LORA:
+        if( ( Read( REG_LR_IRQFLAGS ) & 0x01 ) == 0x01 )
+        {
+            // Clear Irq
+            Write( REG_LR_IRQFLAGS, RFLR_IRQFLAGS_CADDETECTED_MASK | RFLR_IRQFLAGS_CADDONE);
+            if( ( cadDone != NULL ) )
+            {
+                cadDone( true );
+            }
+        }
+        else
+        {        
+            // Clear Irq
+            Write( REG_LR_IRQFLAGS, RFLR_IRQFLAGS_CADDONE );
+            if( ( cadDone != NULL ) )
+            {
+                cadDone( false );
+            }
+        }
+        break;
+    default:
+        break;
+    }
 }
+
 void SX1276::OnDio4Irq( void )
 {
+    switch( this->settings.Modem )
+    {
+    case MODEM_FSK:
+        {
+            if( this->settings.FskPacketHandler.PreambleDetected == false )
+            {
+                this->settings.FskPacketHandler.PreambleDetected = true;
+            }    
+        }
+        break;
+    case MODEM_LORA:
+        break;
+    default:
+        break;
+    }
 }
+
 void SX1276::OnDio5Irq( void )
 {
+    switch( this->settings.Modem )
+    {
+    case MODEM_FSK:
+        break;
+    case MODEM_LORA:
+        break;
+    default:
+        break;
+    }
 }

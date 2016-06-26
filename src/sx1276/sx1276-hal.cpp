@@ -87,6 +87,15 @@ void SX1276MB1xAS::SpiInit( void )
 	SPI.begin();
 }
 static const SPISettings settings(10E6, MSBFIRST, SPI_MODE0);
+void SX1276MB1xAS::IoIrqInit( DioIrqHandler *irqHandlers )
+{
+}
+
+void SX1276MB1xAS::IoDeInit( void )
+{
+    //nothing
+}
+
 uint8_t SX1276MB1xAS::GetPaSelect( uint32_t channel )
 {
     if( channel > RF_MID_BAND_THRESH )
@@ -96,6 +105,7 @@ uint8_t SX1276MB1xAS::GetPaSelect( uint32_t channel )
     {
     }
 }
+
 void SX1276MB1xAS::SetAntSwLowPower( bool status )
 {
     if( isRadioActive != status )
@@ -103,6 +113,15 @@ void SX1276MB1xAS::SetAntSwLowPower( bool status )
         isRadioActive = status;
     }
 }
+
+void SX1276MB1xAS::AntSwInit( void )
+{
+}
+
+void SX1276MB1xAS::AntSwDeInit( void )
+{
+}
+
 void SX1276MB1xAS::SetAntSw( uint8_t rxTx )
 {
     if( this->rxTx == rxTx )

@@ -47,11 +47,13 @@
 #define RX_TIMEOUT_VALUE                                3500000   // in us
 #define BUFFER_SIZE                                     32        // Define the payload size here
 
-//#if( defined ( TARGET_KL25Z ) || defined ( TARGET_LPC11U6X ) )
-//DigitalOut led(LED2);
-//#else
-//DigitalOut led(LED1);
-//#endif
+#if 0
+#if( defined ( TARGET_KL25Z ) || defined ( TARGET_LPC11U6X ) )
+DigitalOut led(LED2);
+#else
+DigitalOut led(LED1);
+#endif
+#endif
 
 /*
  *  Global variables declarations
@@ -83,7 +85,7 @@ void setup()
     while( Radio.Read( REG_VERSION ) == 0x00  )
     {
         debug( "Radio could not be detected!\n\r" );
-		delay( 1000 );
+        wait( 1 );
     }
             
     debug_if( ( DEBUG_MESSAGE & ( Radio.DetectBoardType( ) == SX1276MB1LAS ) ) , "\n\r > Board Type: SX1276MB1LAS < \n\r" );
@@ -154,7 +156,7 @@ void loop()
                         {
                             Buffer[i] = i - 4;
                         }
-                        delay( 10 ); 
+                        wait_ms( 10 ); 
                         Radio.Send( Buffer, BufferSize );
                     }
                     else if( strncmp( ( const char* )Buffer, ( const char* )PingMsg, 4 ) == 0 )
@@ -169,7 +171,7 @@ void loop()
                         {
                             Buffer[i] = i - 4;
                         }
-                        delay( 10 ); 
+                        wait_ms( 10 ); 
                         Radio.Send( Buffer, BufferSize );
                     }
                     else // valid reception but neither a PING or a PONG message
@@ -194,7 +196,7 @@ void loop()
                         {
                             Buffer[i] = i - 4;
                         }
-                        delay( 10 );  
+                        wait_ms( 10 );  
                         Radio.Send( Buffer, BufferSize );
                     }
                     else // valid reception but not a PING as expected
@@ -228,7 +230,7 @@ void loop()
                 {
                     Buffer[i] = i - 4;
                 }
-                delay( 10 ); 
+                wait_ms( 10 ); 
                 Radio.Send( Buffer, BufferSize );
             }
             else
@@ -247,7 +249,7 @@ void loop()
                 {
                     Buffer[i] = i - 4;
                 }
-                delay( 10 );  
+                wait_ms( 10 );  
                 Radio.Send( Buffer, BufferSize );
             }
             else
@@ -258,7 +260,7 @@ void loop()
                 {
                     Buffer[i] = i - 4;
                 }
-                delay( 10 );  
+                wait_ms( 10 );  
                 Radio.Send( Buffer, BufferSize );
             }
             State = LOWPOWER;

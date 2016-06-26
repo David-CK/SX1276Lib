@@ -49,6 +49,20 @@ public:
     virtual void SpiInit( void );
     
     /*!
+     * @brief Initializes DIO IRQ handlers
+     *
+     * @param [IN] irqHandlers Array containing the IRQ callback functions
+     */
+    virtual void IoIrqInit( DioIrqHandler *irqHandlers );
+
+    /*!
+     * @brief De-initializes the radio I/Os pins interface. 
+     *
+     * \remark Useful when going in MCU lowpower modes
+     */
+    virtual void IoDeInit( void );
+
+    /*!
      * @brief Gets the board PA selection configuration
      *
      * @param [IN] channel Channel frequency in Hz
@@ -62,6 +76,19 @@ public:
      * @param [IN] status enable or disable
      */
     virtual void SetAntSwLowPower( bool status );
+
+    /*!
+     * @brief Initializes the RF Switch I/Os pins interface
+     */
+    virtual void AntSwInit( void );
+
+    /*!
+     * @brief De-initializes the RF Switch I/Os pins interface 
+     *
+     * \remark Needed to decrease the power consumption in MCU lowpower modes
+     */
+    virtual void AntSwDeInit( void );
+
     /*!
      * @brief Controls the antena switch if necessary.
      *
