@@ -17,11 +17,13 @@ Maintainers: Miguel Luis, Gregory Cristian and Nicolas Huguenin
 
 #include <stdint.h>
 //#include <stdio.h>
-#include <stddef.h>
+//#include <stddef.h>
 //#include <stdbool.h>
 //#include <stdlib.h>
-#include <string.h>
+//#include <string.h>
 #include <Arduino.h>
+//#include <lmic.h>
+
 #include "debug-git/debug.h"
 typedef uint8_t			PinName;
 typedef uint8_t			DigitalIn;
@@ -31,6 +33,10 @@ typedef uint8_t			InterruptIn;
 
 #define wait(x)			delay(x * 1000)
 #define wait_ms(x)		delay(x)
+#define TEST() { Serial.begin(115200); Serial.println("test...");}
+
+
+
 
 /*!
  *    State of the radio:

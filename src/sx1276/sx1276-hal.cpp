@@ -48,12 +48,15 @@ SX1276MB1xAS::SX1276MB1xAS( void ( *txDone )( ), void ( *txTimeout ) ( ), void (
     IoInit( );
     
     SetOpMode( RF_OPMODE_SLEEP );
+	/**ck**/
+    IoIrqInit( dioIrq );
     
     RadioRegistersInit( );
 
     SetModem( MODEM_FSK );
 
     this->settings.State = IDLE ;
+	os_init();
 }
 
 //-------------------------------------------------------------------------
@@ -87,8 +90,14 @@ void SX1276MB1xAS::SpiInit( void )
 	SPI.begin();
 }
 static const SPISettings settings(10E6, MSBFIRST, SPI_MODE0);
+void handler(void);
 void SX1276MB1xAS::IoIrqInit( DioIrqHandler *irqHandlers )
 {
+Serial.begin(115200);
+debug("irqinit\n");
+//attachInterrupt(A4, handler, RISING);
+attachInterrupt(0, handler, CHANGE );
+
 }
 
 void SX1276MB1xAS::IoDeInit( void )
@@ -103,6 +112,8 @@ uint8_t SX1276MB1xAS::GetPaSelect( uint32_t channel )
     }
     else
     {
+	/**ck**/
+        return RF_PACONFIG_PASELECT_RFO;
     }
 }
 
@@ -203,20 +214,34 @@ uint8_t SX1276MB1xAS::Read( uint8_t addr )
 
 void SX1276MB1xAS::Write( uint8_t addr, uint8_t *buffer, uint8_t size )
 {
+    lora_pin_nss(0);
+    lora_spi(addr | 0x80);
+    for (uint8_t i = 0; i < size; i++) {
+        lora_spi(buffer[i]);
+    }
+    lora_pin_nss(1);
 	/*CK*/
 }
 
 void SX1276MB1xAS::Read( uint8_t addr, uint8_t *buffer, uint8_t size )
 {
+    lora_pin_nss(0);
+    lora_spi(addr & 0x7F);
+    for (uint8_t i = 0; i < size; i++) {
+        buffer[i] = lora_spi(0x00);
+    }
+    lora_pin_nss(1);
 	/*CK*/
 }
 
 void SX1276MB1xAS::WriteFifo( uint8_t *buffer, uint8_t size )
 {
+    Write( 0, buffer, size );
 	/*CK*/
 }
 
 void SX1276MB1xAS::ReadFifo( uint8_t *buffer, uint8_t size )
 {
+    Read( 0, buffer, size );
 	/*CK*/
 }

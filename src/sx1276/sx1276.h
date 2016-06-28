@@ -15,10 +15,18 @@ Maintainers: Miguel Luis, Gregory Cristian and Nicolas Huguenin
 #ifndef __SX1276_H__
 #define __SX1276_H__
 
+#include <lmic.h>
+
 #include "./radio/radio.h"
 #include "./registers/sx1276Regs-Fsk.h"
 #include "./registers/sx1276Regs-LoRa.h"
 #include "./typedefs/typedefs.h"
+
+extern osjob_t txTimeoutJob;
+extern osjob_t rxTimeoutJob;
+extern osjob_t rxTimeoutSyncWordJob;
+
+void OnTimeoutCallback( osjob_t* job );
 
 /*!
  * Radio wakeup time from SLEEP mode
@@ -84,6 +92,14 @@ protected:
      * Hardware DIO IRQ functions
      */
     DioIrqHandler *dioIrq;
+    
+    /*!
+     * Tx and Rx timers
+     */
+    //Timeout txTimeoutTimer;
+    //Timeout rxTimeoutTimer;
+    //Timeout rxTimeoutSyncWord;
+    
     /*!
      *  rxTx: [1: Tx, 0: Rx]
      */
@@ -345,6 +361,8 @@ public:
      * @brief Resets the SX1276
      */
     virtual void Reset( void ) = 0;
+	
+	virtual void OnTimeoutHandler( void );
     
     //-------------------------------------------------------------------------
     //                        Board relative functions

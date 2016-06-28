@@ -14,6 +14,10 @@ Maintainers: Miguel Luis, Gregory Cristian and Nicolas Huguenin
 */
 #include "sx1276.h"
 
+osjob_t txTimeoutJob;
+osjob_t rxTimeoutJob;
+osjob_t rxTimeoutSyncWordJob;
+
 const FskBandwidth_t SX1276::FskBandwidths[] =
 {       
     { 2600  , 0x17 },   
@@ -52,7 +56,7 @@ SX1276::SX1276( void ( *txDone )( ), void ( *txTimeout ) ( ), void ( *rxDone ) (
                 dio0( dio0 ), dio1( dio1 ), dio2( dio2 ), dio3( dio3 ), dio4( dio4 ), dio5( dio5 ),
                 isRadioActive( false )
 {
-    wait_ms( 10 );
+    //wait_ms( 10 );
     this->rxTx = 0;
     this->rxBuffer = new uint8_t[RX_BUFFER_SIZE];
     previousOpMode = RF_OPMODE_STANDBY;
@@ -93,7 +97,9 @@ void SX1276::RxChainCalibration( void )
     Write ( REG_IMAGECAL, ( Read( REG_IMAGECAL ) & RF_IMAGECAL_IMAGECAL_MASK ) | RF_IMAGECAL_IMAGECAL_START );
     while( ( Read( REG_IMAGECAL ) & RF_IMAGECAL_IMAGECAL_RUNNING ) == RF_IMAGECAL_IMAGECAL_RUNNING )
     {
-	break;
+		Serial.begin(115200);
+		debug("while-1\n");
+		break;
     }
 
     // Sets a Frequency in HF band
@@ -103,6 +109,8 @@ void SX1276::RxChainCalibration( void )
     Write ( REG_IMAGECAL, ( Read( REG_IMAGECAL ) & RF_IMAGECAL_IMAGECAL_MASK ) | RF_IMAGECAL_IMAGECAL_START );
     while( ( Read( REG_IMAGECAL ) & RF_IMAGECAL_IMAGECAL_RUNNING ) == RF_IMAGECAL_IMAGECAL_RUNNING )
     {
+		Serial.begin(115200);
+		debug("while-1\n");
 		break;
     }
 
@@ -683,6 +691,7 @@ void SX1276::Send( uint8_t *buffer, uint8_t size )
             // Write payload buffer
             WriteFifo( buffer, size );
             txTimeout = this->settings.LoRa.TxTimeout;
+			debug("radio send\n");
         }
         break;
     }
@@ -692,11 +701,20 @@ void SX1276::Send( uint8_t *buffer, uint8_t size )
 
 void SX1276::Sleep( void )
 {
+    // Initialize driver timeout timers
+    //txTimeoutTimer.detach(  );
+    //rxTimeoutTimer.detach( );
+	os_clearCallback( &txTimeoutJob );
+	os_clearCallback( &rxTimeoutJob );
     SetOpMode( RF_OPMODE_SLEEP );
 }
 
 void SX1276::Standby( void )
 {
+    //txTimeoutTimer.detach(  );
+    //rxTimeoutTimer.detach( );
+	os_clearCallback( &txTimeoutJob );
+	os_clearCallback( &rxTimeoutJob );
     SetOpMode( RF_OPMODE_STANDBY );
 }
 
@@ -787,6 +805,8 @@ void SX1276::Rx( uint32_t timeout )
     this->settings.State = RX;
     if( timeout != 0 )
     {
+        //rxTimeoutTimer.attach_us( this, &SX1276::OnTimeoutIrq, timeout );
+		os_setTimedCallback( &rxTimeoutJob, os_getTime() + us2osticks( timeout ), OnTimeoutCallback );
     }
 
     if( this->settings.Modem == MODEM_FSK )
@@ -795,6 +815,18 @@ void SX1276::Rx( uint32_t timeout )
         
         if( rxContinuous == false )
         {
+			/*
+            rxTimeoutSyncWord.attach_us( this, &SX1276::OnTimeoutIrq, ( 8.0 * ( this->settings.Fsk.PreambleLen +
+                                                         ( ( Read( REG_SYNCCONFIG ) &
+                                                            ~RF_SYNCCONFIG_SYNCSIZE_MASK ) +
+                                                         1.0 ) + 1.0 ) /
+                                                        ( double )this->settings.Fsk.Datarate ) * 1e6 ) ;
+			*/
+            os_setTimedCallback( &rxTimeoutSyncWordJob, os_getTime() + us2osticks( ( 8.0 * ( this->settings.Fsk.PreambleLen +
+                                                         ( ( Read( REG_SYNCCONFIG ) &
+                                                            ~RF_SYNCCONFIG_SYNCSIZE_MASK ) +
+                                                         1.0 ) + 1.0 ) /
+                                                        ( double )this->settings.Fsk.Datarate ) * 1e6 ), OnTimeoutCallback ) ;
         }
     }
     else
@@ -868,6 +900,9 @@ void SX1276::Tx( uint32_t timeout )
     }
 
     this->settings.State = TX;
+	debug("tx status\n");
+    //txTimeoutTimer.attach_us( this, &SX1276::OnTimeoutIrq, timeout );
+    os_setTimedCallback( &txTimeoutJob, os_getTime() + us2osticks( timeout ), OnTimeoutCallback );
     SetOpMode( RF_OPMODE_TRANSMITTER );
 }
 
@@ -982,6 +1017,11 @@ void SX1276::SetModem( ModemType modem )
     }
 }
 
+void SX1276::OnTimeoutHandler( void )
+{
+	OnTimeoutIrq();
+}
+
 void SX1276::OnTimeoutIrq( void )
 {
     switch( this->settings.State )
@@ -1008,6 +1048,8 @@ void SX1276::OnTimeoutIrq( void )
             else
             {
                 this->settings.State = IDLE;
+                //rxTimeoutSyncWord.detach( );
+                os_clearCallback( &rxTimeoutSyncWordJob );
             }
         }
         if( ( rxTimeout != NULL ) )
@@ -1029,11 +1071,14 @@ void SX1276::OnTimeoutIrq( void )
 
 void SX1276::OnDio0Irq( void )
 {
-    volatile uint8_t irqFlags = 0;
+    //__IO uint8_t irqFlags = 0;
+	volatile uint8_t irqFlags = 0;
   
     switch( this->settings.State )
     {                
         case RX:
+            //TimerStop( &RxTimeoutTimer );
+            // RxDone interrupt
             switch( this->settings.Modem )
             {
             case MODEM_FSK:
@@ -1051,12 +1096,26 @@ void SX1276::OnDio0Irq( void )
                         if( this->settings.Fsk.RxContinuous == false )
                         {
                             this->settings.State = IDLE;
+							/*
+                            rxTimeoutSyncWord.attach_us( this, &SX1276::OnTimeoutIrq, (  8.0 * ( this->settings.Fsk.PreambleLen +
+                                                             ( ( Read( REG_SYNCCONFIG ) &
+                                                                ~RF_SYNCCONFIG_SYNCSIZE_MASK ) +
+                                                             1.0 ) + 1.0 ) /
+                                                            ( double )this->settings.Fsk.Datarate ) * 1e6 ) ;
+							*/
+                            os_setTimedCallback( &rxTimeoutSyncWordJob, os_getTime() + us2osticks( (  8.0 * ( this->settings.Fsk.PreambleLen +
+                                                             ( ( Read( REG_SYNCCONFIG ) &
+                                                                ~RF_SYNCCONFIG_SYNCSIZE_MASK ) +
+                                                             1.0 ) + 1.0 ) /
+                                                            ( double )this->settings.Fsk.Datarate ) * 1e6 ), OnTimeoutCallback ) ;
                         }
                         else
                         {
                             // Continuous mode restart Rx chain
                             Write( REG_RXCONFIG, Read( REG_RXCONFIG ) | RF_RXCONFIG_RESTARTRXWITHOUTPLLLOCK );
                         }
+                        //rxTimeoutTimer.detach( );
+						os_clearCallback( &rxTimeoutJob );
     
                         if( ( rxError != NULL ) )
                         {
@@ -1093,12 +1152,26 @@ void SX1276::OnDio0Irq( void )
                 if( this->settings.Fsk.RxContinuous == false )
                 {
                     this->settings.State = IDLE;
+					/*
+                    rxTimeoutSyncWord.attach_us( this, &SX1276::OnTimeoutIrq, ( 8.0 * ( this->settings.Fsk.PreambleLen +
+                                                         ( ( Read( REG_SYNCCONFIG ) &
+                                                            ~RF_SYNCCONFIG_SYNCSIZE_MASK ) +
+                                                         1.0 ) + 1.0 ) /
+                                                        ( double )this->settings.Fsk.Datarate ) * 1e6 ) ;
+					*/
+                    os_setTimedCallback( &rxTimeoutSyncWordJob, os_getTime() + us2osticks( ( 8.0 * ( this->settings.Fsk.PreambleLen +
+                                                         ( ( Read( REG_SYNCCONFIG ) &
+                                                            ~RF_SYNCCONFIG_SYNCSIZE_MASK ) +
+                                                         1.0 ) + 1.0 ) /
+                                                        ( double )this->settings.Fsk.Datarate ) * 1e6 ), OnTimeoutCallback ) ;
                 }
                 else
                 {
                     // Continuous mode restart Rx chain
                     Write( REG_RXCONFIG, Read( REG_RXCONFIG ) | RF_RXCONFIG_RESTARTRXWITHOUTPLLLOCK );
                 }
+                //rxTimeoutTimer.detach( );
+                os_clearCallback( &rxTimeoutJob );
 
                 if( (rxDone != NULL ) )
                 {
@@ -1126,6 +1199,8 @@ void SX1276::OnDio0Irq( void )
                         {
                             this->settings.State = IDLE;
                         }
+                        //rxTimeoutTimer.detach( );
+                        os_clearCallback( &rxTimeoutJob );
 
                         if( ( rxError != NULL ) )
                         {
@@ -1180,6 +1255,8 @@ void SX1276::OnDio0Irq( void )
                     {
                         this->settings.State = IDLE;
                     }
+                    //rxTimeoutTimer.detach( );
+                    os_clearCallback( &rxTimeoutJob );	
 
                     if( ( rxDone != NULL ) )
                     {
@@ -1192,6 +1269,8 @@ void SX1276::OnDio0Irq( void )
             }
             break;
         case TX:
+            //txTimeoutTimer.detach(  );
+            os_clearCallback( &txTimeoutJob );			
             // TxDone interrupt
             switch( this->settings.Modem )
             {
@@ -1248,6 +1327,9 @@ void SX1276::OnDio1Irq( void )
                 }
                 break;
             case MODEM_LORA:
+                // Sync time out
+                //rxTimeoutTimer.detach( );
+                os_clearCallback( &rxTimeoutJob );
                 this->settings.State = IDLE;
                 if( ( rxTimeout != NULL ) )
                 {
@@ -1296,6 +1378,8 @@ void SX1276::OnDio2Irq( void )
             case MODEM_FSK:
                 if( ( this->settings.FskPacketHandler.PreambleDetected == true ) && ( this->settings.FskPacketHandler.SyncWordDetected == false ) )
                 {
+                    //rxTimeoutSyncWord.detach( );
+                    os_clearCallback( &rxTimeoutSyncWordJob );
                     
                     this->settings.FskPacketHandler.SyncWordDetected = true;
                 

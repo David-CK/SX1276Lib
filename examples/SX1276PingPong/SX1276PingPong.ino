@@ -1,3 +1,4 @@
+#include <lmic.h>
 #include <SX1276Lib.h>
 #include "SX1276PingPong.h"
 
@@ -74,10 +75,11 @@ int8_t SnrValue = 0.0;
 
 static uint8_t i;
 static bool isMaster = true;
-
+void handler(void);
 void setup()
 {
 	Serial.begin(115200);
+
     
     debug( "\n\n\r     SX1276 Ping Pong Demo Application \n\n\r" );
     
@@ -92,6 +94,11 @@ void setup()
     debug_if( ( DEBUG_MESSAGE & ( Radio.DetectBoardType( ) == SX1276MB1MAS ) ) , "\n\r > Board Type: SX1276MB1MAS < \n\r" );
     
     Radio.SetChannel( RF_FREQUENCY ); 
+	uint8_t ret = 40;
+	ret = os_clearCallback(&rxTimeoutJob);
+	debug(ret);
+	debug("\n");
+
 
 #if USE_MODEM_LORA == 1
     
@@ -132,15 +139,37 @@ void setup()
     debug_if( DEBUG_MESSAGE, "Starting Ping-Pong loop\r\n" ); 
         
     //led = 0;
-        
+
     Radio.Rx( RX_TIMEOUT_VALUE );
+	attachInterrupt(1, handler, LOW );
+
+}
+
+//extern int abc;
+
+void OnTimeoutCallback(osjob_t* job) { 
+	//onTimeoutFlag = 1; 
+Radio.OnTimeoutHandler(); 
+debug("fdafdabc\n");
+}
+void handler(void)
+{
+	debug("aaaaaaaaaaaaaaaa\n");
+
 }
 
 void loop()
 {
+	os_runloop_once();
+	//if (onTimeoutFlag == 1) {
+		//Radio.OnTimeoutHandler();
+		//onTimeoutFlag = 0;
+		//debug("onTimeoutFlag\n");
+	//}
         switch( State )
         {
         case RX:
+			debug("RX\n");
             if( isMaster == true )
             {
                 if( BufferSize > 0 )
@@ -209,6 +238,7 @@ void loop()
             State = LOWPOWER;
             break;
         case TX:    
+			debug("TX\n");
             //led = !led; 
             if( isMaster == true )  
             {
@@ -222,8 +252,10 @@ void loop()
             State = LOWPOWER;
             break;
         case RX_TIMEOUT:
+			debug("RX_TIMEOUT\n");
             if( isMaster == true )
             {
+				debug("send...\n");
                 // Send the next PING frame
                 strcpy( ( char* )Buffer, ( char* )PingMsg );
                 for( i = 4; i < BufferSize; i++ )
@@ -240,6 +272,7 @@ void loop()
             State = LOWPOWER;
             break;
         case RX_ERROR:
+			debug("RX_ERROR\n");
             // We have received a Packet with a CRC error, send reply as if packet was correct
             if( isMaster == true )
             {
@@ -266,12 +299,15 @@ void loop()
             State = LOWPOWER;
             break;
         case TX_TIMEOUT:
+			debug("TX_TIMEOUT\n");
             Radio.Rx( RX_TIMEOUT_VALUE );
             State = LOWPOWER;
             break;
         case LOWPOWER:
+			//debug("LOWPOWER\n");
             break;
         default:
+			debug("default\n");
             State = LOWPOWER;
             break;
         }    

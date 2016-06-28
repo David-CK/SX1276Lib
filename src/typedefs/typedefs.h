@@ -49,5 +49,11 @@ typedef struct
     uint8_t     Value;
 }RadioRegisters_t;
 
+typedef struct
+{
+	osjob_t *scheduledjobs;
+	osjob_t *runnablejobs;
+} OS_t;
+
 #endif //__TYPEDEFS_H__
 

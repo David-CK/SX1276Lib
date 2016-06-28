@@ -65,14 +65,7 @@ extern "C" void __cxa_pure_virtual() {;}
 #define portModeRegister(P)
 
 //
-void OnTimeoutCallback(osjob_t* job);
 //
-void OnTxDone( void );
-void OnRxDone( uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr);
-void OnTxTimeout( void );
-void OnRxTimeout( void );
-void OnRxError( void );
 
-#include <SX1276PingPong.ino>
-#include <SX1276PingPong.h>
+#include <jobs.ino>
 #endif
